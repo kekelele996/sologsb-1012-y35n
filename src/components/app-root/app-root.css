@@ -219,3 +219,83 @@ ion-content { --background: var(--studio-canvas); }
   .editor-panel { overflow: visible; }
   .editor-scroll { overflow: visible; }
 }
+
+/* 双档案切换 */
+.view-switcher {
+  margin-left: 18px;
+  --background: rgba(255, 255, 255, 0.12);
+  border-radius: 9px;
+  padding: 2px;
+  min-height: 34px;
+}
+.view-switcher ion-segment-button {
+  --color: #bfe0d7;
+  --color-checked: #173c35;
+  --background-checked: #d8f6ea;
+  --indicator-color: transparent;
+  min-height: 28px;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: none;
+  border-radius: 7px;
+}
+
+/* 检查点编辑器 */
+.checkpoint-head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+.checkpoint-head-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: #334a45;
+}
+.checkpoint-editor {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 10px;
+}
+.checkpoint-empty {
+  margin: 0;
+  border: 1px dashed #bcc9c5;
+  border-radius: 9px;
+  padding: 12px 14px;
+  color: #6a7d78;
+  font-size: 12px;
+  background: #f8fbfa;
+}
+.checkpoint-row {
+  display: grid;
+  grid-template-columns: 92px minmax(200px, 1fr) 96px 40px;
+  gap: 8px;
+  align-items: center;
+}
+.checkpoint-row input {
+  width: 100%;
+  border: 1px solid #d3dcd9;
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 12.5px;
+  color: #21312d;
+  background: #fff;
+}
+.checkpoint-row input:focus {
+  outline: none;
+  border-color: #2f7a6d;
+  box-shadow: 0 0 0 2px rgba(47, 122, 109, 0.12);
+}
+.checkpoint-code {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-weight: 700;
+}
+.checkpoint-second {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.checkpoint-second input { text-align: right; }
+.checkpoint-second span { font-size: 11px; color: #6a7d78; }

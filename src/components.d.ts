@@ -5,8 +5,21 @@
  * It contains typing information for all components that exist in this project.
  */
 import { HTMLStencilElement, JSXBase } from "@stencil/core/internal";
+import { CheckpointRef } from "./models";
+export { CheckpointRef } from "./models";
 export namespace Components {
     interface AppRoot {
+    }
+    interface LearningArchive {
+        /**
+          * 编排台检查点目录（只读），由 app-root 注入，档案不反向改课程。
+          * @default []
+         */
+        "checkpoints": CheckpointRef[];
+        /**
+          * @default true
+         */
+        "online": boolean;
     }
 }
 declare global {
@@ -16,15 +29,39 @@ declare global {
         prototype: HTMLAppRootElement;
         new (): HTMLAppRootElement;
     };
+    interface HTMLLearningArchiveElement extends Components.LearningArchive, HTMLStencilElement {
+    }
+    var HTMLLearningArchiveElement: {
+        prototype: HTMLLearningArchiveElement;
+        new (): HTMLLearningArchiveElement;
+    };
     interface HTMLElementTagNameMap {
         "app-root": HTMLAppRootElement;
+        "learning-archive": HTMLLearningArchiveElement;
     }
 }
 declare namespace LocalJSX {
     interface AppRoot {
     }
+    interface LearningArchive {
+        /**
+          * 编排台检查点目录（只读），由 app-root 注入，档案不反向改课程。
+          * @default []
+         */
+        "checkpoints"?: CheckpointRef[];
+        /**
+          * @default true
+         */
+        "online"?: boolean;
+    }
+
+    interface LearningArchiveAttributes {
+        "online": boolean;
+    }
+
     interface IntrinsicElements {
         "app-root": AppRoot;
+        "learning-archive": Omit<LearningArchive, keyof LearningArchiveAttributes> & { [K in keyof LearningArchive & keyof LearningArchiveAttributes]?: LearningArchive[K] } & { [K in keyof LearningArchive & keyof LearningArchiveAttributes as `attr:${K}`]?: LearningArchiveAttributes[K] } & { [K in keyof LearningArchive & keyof LearningArchiveAttributes as `prop:${K}`]?: LearningArchive[K] };
     }
 }
 export { LocalJSX as JSX };
@@ -32,6 +69,7 @@ declare module "@stencil/core" {
     export namespace JSX {
         interface IntrinsicElements {
             "app-root": LocalJSX.IntrinsicElements["app-root"] & JSXBase.HTMLAttributes<HTMLAppRootElement>;
+            "learning-archive": LocalJSX.IntrinsicElements["learning-archive"] & JSXBase.HTMLAttributes<HTMLLearningArchiveElement>;
         }
     }
 }

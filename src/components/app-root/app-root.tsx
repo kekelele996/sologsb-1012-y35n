@@ -1,13 +1,17 @@
 import { Component, Host, State, h, Listen } from '@stencil/core';
 import {
   cloneProject,
-  createDemoProject,
+  createCheckpoint,
+  diffProjectCheckpoints,
+  listCheckpoints,
+  PROJECT_STORAGE_KEY,
   selectedModule,
   selectedStep,
-  STORAGE_KEY,
   validateProject,
   type CameraAngle,
   type CaptionPosition,
+  type Checkpoint,
+  type CheckpointRef,
   type CourseModule,
   type CourseProject,
   type Difficulty,
@@ -15,8 +19,11 @@ import {
   type LessonStep,
   type ValidationCheck,
 } from '../../models';
+import { createDemoProject, runStartupMigration } from '../../data/migration';
+import { loadArchive, voidRecordsForCheckpoints, type ArchiveState } from '../../data/archive-store';
 
 type PreviewSize = 'phone' | 'tablet';
+type View = 'studio' | 'archive';
 
 @Component({
   tag: 'app-root',
@@ -27,21 +34,26 @@ export class AppRoot {
   @State() project: CourseProject = createDemoProject();
   @State() previewSize: PreviewSize = 'phone';
   @State() activePanel: 'editor' | 'checks' = 'editor';
+  @State() view: View = 'studio';
   @State() playing = false;
   @State() playProgress = 0;
   @State() offline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
+  @State() archive: ArchiveState | null = null;
   @State() toast?: { color: string; message: string };
   private past: CourseProject[] = [];
   private future: CourseProject[] = [];
   private playTimer?: number;
 
   componentWillLoad(): void {
+    // 旧合订稿在这里一次性拆开：编排台与学习档案各自维护。
+    runStartupMigration();
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
       if (saved) this.project = JSON.parse(saved) as CourseProject;
     } catch {
       this.project = createDemoProject();
     }
+    this.archive = loadArchive();
   }
 
   disconnectedCallback(): void {
@@ -51,13 +63,14 @@ export class AppRoot {
   @Listen('online', { target: 'window' })
   handleOnline(): void {
     this.offline = false;
-    this.showToast('success', '网络已恢复，本地草稿无需合并即可继续编辑。');
+    this.archive = loadArchive();
+    this.showToast('success', '网络已恢复：编排台草稿保存在本机；学习档案将自动按学员对账。');
   }
 
   @Listen('offline', { target: 'window' })
   handleOffline(): void {
     this.offline = true;
-    this.showToast('warning', '当前处于离线状态，修改会继续保存在本机。');
+    this.showToast('warning', '当前处于离线状态：课程稿与学习档案都会继续保存在本机。');
   }
 
   @Listen('keydown', { target: 'window' })
@@ -97,8 +110,12 @@ export class AppRoot {
     return validateProject(this.project);
   }
 
+  private get checkpointCatalog(): CheckpointRef[] {
+    return listCheckpoints(this.project);
+  }
+
   private persist(): void {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(this.project));
+    localStorage.setItem(PROJECT_STORAGE_KEY, JSON.stringify(this.project));
   }
 
   private commit(update: (draft: CourseProject) => CourseProject, toast?: string): void {
@@ -114,6 +131,17 @@ export class AppRoot {
     this.future = [];
     this.project = next;
     this.persist();
+    // 检查点一改，学习档案里挂该检查点的未结业掌握记录作废，结业学员照旧保留。
+    const { changed, deleted } = diffProjectCheckpoints(before, next);
+    const touched = [...changed, ...deleted];
+    if (touched.length > 0) {
+      const { voidedCount } = voidRecordsForCheckpoints(touched.map((item) => item.id));
+      this.archive = loadArchive();
+      if (voidedCount > 0) {
+        this.showToast('warning', `检查点已调整：${voidedCount} 条未结业学员的旧掌握记录作废，需要重新登记（已结业学员记录保留）。`);
+        return;
+      }
+    }
     if (toast) this.showToast('success', toast);
   }
 
@@ -170,6 +198,42 @@ export class AppRoot {
     }));
   }
 
+  private updateStepCheckpoints(stepId: string, checkpoints: Checkpoint[], toast?: string): void {
+    this.commit((draft) => ({
+      ...draft,
+      modules: draft.modules.map((module) => module.id === draft.selectedModuleId ? {
+        ...module,
+        steps: module.steps.map((step) => step.id === stepId ? { ...step, checkpoints } : step),
+      } : module),
+    }), toast);
+  }
+
+  private addCheckpoint(): void {
+    const step = this.currentStep;
+    if (!step) return;
+    const checkpoint = createCheckpoint(step.id, step.checkpoints.length + 1, Math.round(step.duration / 2), `观察点 ${step.checkpoints.length + 1}`);
+    this.updateStepCheckpoints(step.id, [...step.checkpoints, checkpoint], '已新增检查点。');
+  }
+
+  private updateCheckpoint(checkpointId: string, patch: Partial<Checkpoint>): void {
+    const step = this.currentStep;
+    if (!step) return;
+    this.updateStepCheckpoints(
+      step.id,
+      step.checkpoints.map((checkpoint) => checkpoint.id === checkpointId ? { ...checkpoint, ...patch } : checkpoint),
+    );
+  }
+
+  private removeCheckpoint(checkpointId: string): void {
+    const step = this.currentStep;
+    if (!step) return;
+    this.updateStepCheckpoints(
+      step.id,
+      step.checkpoints.filter((checkpoint) => checkpoint.id !== checkpointId),
+      '检查点已删除，相关旧掌握记录将作废。',
+    );
+  }
+
   private addModule(): void {
     const index = this.project.modules.length + 1;
     const module: CourseModule = {
@@ -204,7 +268,7 @@ export class AppRoot {
       altText: '',
       prerequisiteId: prior?.id ?? '',
       difficulty: '入门',
-      cuePoints: [8, 20, 32],
+      checkpoints: [],
     };
     this.commit((draft) => ({
       ...draft,
@@ -451,7 +515,45 @@ export class AppRoot {
               <ion-select-option value="">无前置条件</ion-select-option>
               {prerequisites.map((item) => <ion-select-option value={item.id}>{item.title}</ion-select-option>)}
             </ion-select>
-            <ion-input disabled={frozen} label="检查点（秒，用逗号分隔）" labelPlacement="stacked" class="studio-input" value={step.cuePoints.join(', ')} onIonInput={(event) => this.updateStep({ cuePoints: (event.detail.value ?? '').split(/[,，\s]+/).map(Number).filter((value) => Number.isFinite(value)) })} />
+            <div class="checkpoint-head">
+              <span class="checkpoint-head-label">学习检查点（{step.checkpoints.length}）</span>
+              <ion-button disabled={frozen} size="small" fill="outline" class="studio-button" onClick={() => this.addCheckpoint()}>＋ 新增检查点</ion-button>
+            </div>
+          </div>
+          <div class="checkpoint-editor">
+            {step.checkpoints.length === 0 && <p class="checkpoint-empty">还没有检查点。检查点带编号和标题，学习档案据此登记学员掌握情况。</p>}
+            {[...step.checkpoints]
+              .sort((a, b) => a.atSecond - b.atSecond)
+              .map((checkpoint) => (
+                <div class="checkpoint-row" key={checkpoint.id}>
+                  <input
+                    class="checkpoint-code"
+                    disabled={frozen}
+                    value={checkpoint.code}
+                    placeholder="编号"
+                    onChange={(event) => this.updateCheckpoint(checkpoint.id, { code: (event.target as HTMLInputElement).value })}
+                  />
+                  <input
+                    class="checkpoint-title"
+                    disabled={frozen}
+                    value={checkpoint.title}
+                    placeholder="检查点标题（旧档案按它回填编号）"
+                    onChange={(event) => this.updateCheckpoint(checkpoint.id, { title: (event.target as HTMLInputElement).value })}
+                  />
+                  <div class="checkpoint-second">
+                    <input
+                      type="number"
+                      min="0"
+                      max={step.duration}
+                      disabled={frozen}
+                      value={String(checkpoint.atSecond)}
+                      onChange={(event) => this.updateCheckpoint(checkpoint.id, { atSecond: Number((event.target as HTMLInputElement).value) || 0 })}
+                    />
+                    <span>秒</span>
+                  </div>
+                  <ion-button disabled={frozen} fill="clear" color="danger" size="small" class="studio-button" onClick={() => this.removeCheckpoint(checkpoint.id)}>删</ion-button>
+                </div>
+              ))}
           </div>
           <ion-textarea disabled={frozen} autoGrow label="常见错误（每行一条）" labelPlacement="stacked" class="studio-input" value={step.commonMistakes.join('\n')} onIonInput={(event) => this.updateStep({ commonMistakes: (event.detail.value ?? '').split('\n').filter(Boolean) })} />
           <div class="form-grid two">
@@ -495,14 +597,14 @@ export class AppRoot {
               <button class="play-button" onClick={() => this.togglePlay()}>{this.playing ? 'Ⅱ' : '▶'}</button>
               <div class="player-timeline">
                 <span style={{ width: `${progress}%` }} />
-                {step.cuePoints.map((cue) => <i style={{ left: `${Math.min(100, (cue / Math.max(1, step.duration)) * 100)}%` }} title={`检查点 ${cue}s`} />)}
+                {[...step.checkpoints].sort((a, b) => a.atSecond - b.atSecond).map((checkpoint) => <i key={checkpoint.id} style={{ left: `${Math.min(100, (checkpoint.atSecond / Math.max(1, step.duration)) * 100)}%` }} title={`${checkpoint.code} ${checkpoint.title} · ${checkpoint.atSecond}s`} />)}
               </div>
               <span class="time-code">{String(Math.floor(this.playProgress * step.duration)).padStart(2, '0')} / {step.duration}s</span>
             </div>
             <div class="preview-meta">
               <div><strong>{step.kind}</strong><span>步骤类型</span></div>
               <div><strong>{step.difficulty}</strong><span>难度标签</span></div>
-              <div><strong>{step.cuePoints.length}</strong><span>检查点</span></div>
+              <div><strong>{step.checkpoints.length}</strong><span>检查点</span></div>
             </div>
             <p class="preview-caption-text">{step.caption}</p>
           </div>
@@ -548,23 +650,38 @@ export class AppRoot {
         <ion-app>
           <ion-header class="studio-header">
             <ion-toolbar>
-              <ion-buttons slot="start"><div class="logo-mark">手</div><div class="app-title"><strong>SignCourse Studio</strong><span>手语课程编排工具</span></div></ion-buttons>
+              <ion-buttons slot="start">
+                <div class="logo-mark">手</div>
+                <div class="app-title"><strong>SignCourse</strong><span>手语课程 · 双档案工作台</span></div>
+                <ion-segment value={this.view} class="view-switcher" onIonChange={(event) => { this.view = event.detail.value as View; if (this.view === 'archive') this.archive = loadArchive(); }}>
+                  <ion-segment-button value="studio">编排台</ion-segment-button>
+                  <ion-segment-button value="archive">学习档案</ion-segment-button>
+                </ion-segment>
+              </ion-buttons>
               <ion-buttons slot="end" class="header-actions">
-                <button class={`connection-status ${this.offline ? 'offline' : ''}`} onClick={() => { this.offline = !this.offline; this.showToast(this.offline ? 'warning' : 'success', this.offline ? '已进入离线模拟，编辑继续保存在本机。' : '已恢复在线模拟，本地草稿保持同步。'); }}><span />{this.offline ? '离线编辑中（点击恢复）' : '本地自动保存（点击模拟离线）'}</button>
-                <ion-button fill="clear" class="studio-button" disabled={this.past.length === 0} onClick={() => this.undo()}>撤销</ion-button>
-                <ion-button fill="clear" class="studio-button" disabled={this.future.length === 0} onClick={() => this.redo()}>重做</ion-button>
-                <ion-button fill="outline" class="studio-button" onClick={() => this.saveDraft()}>保存草稿</ion-button>
-                {this.project.status === 'review'
-                  ? <ion-button color="success" class="studio-button" onClick={() => this.freezeVersion()}>冻结版本</ion-button>
-                  : this.project.status === 'changes'
-                    ? <ion-button color="warning" class="studio-button" onClick={() => this.submitForReview()}>重新提交</ion-button>
-                    : this.project.status === 'frozen'
-                      ? <ion-button class="studio-button" onClick={() => this.reviseFrozen()}>创建修订版</ion-button>
-                      : <ion-button color="primary" class="studio-button" onClick={() => this.submitForReview()}>提交复核</ion-button>}
+                <button class={`connection-status ${this.offline ? 'offline' : ''}`} onClick={() => { this.offline = !this.offline; this.showToast(this.offline ? 'warning' : 'success', this.offline ? '已模拟断网：课程稿继续本机编辑，档案先记本机待对账。' : '已恢复在线：学习档案会按学员自动对账。'); }}><span />{this.offline ? '离线（点击恢复联网）' : '在线（点击模拟断网）'}</button>
+                {this.view === 'studio' && [
+                  <ion-button fill="clear" class="studio-button" disabled={this.past.length === 0} onClick={() => this.undo()}>撤销</ion-button>,
+                  <ion-button fill="clear" class="studio-button" disabled={this.future.length === 0} onClick={() => this.redo()}>重做</ion-button>,
+                  <ion-button fill="outline" class="studio-button" onClick={() => this.saveDraft()}>保存草稿</ion-button>,
+                  this.project.status === 'review'
+                    ? <ion-button color="success" class="studio-button" onClick={() => this.freezeVersion()}>冻结版本</ion-button>
+                    : this.project.status === 'changes'
+                      ? <ion-button color="warning" class="studio-button" onClick={() => this.submitForReview()}>重新提交</ion-button>
+                      : this.project.status === 'frozen'
+                        ? <ion-button class="studio-button" onClick={() => this.reviseFrozen()}>创建修订版</ion-button>
+                        : <ion-button color="primary" class="studio-button" onClick={() => this.submitForReview()}>提交复核</ion-button>,
+                ]}
               </ion-buttons>
             </ion-toolbar>
           </ion-header>
 
+          {this.view === 'archive' ? (
+            <learning-archive
+              checkpoints={this.checkpointCatalog}
+              online={!this.offline}
+            />
+          ) : (
           <ion-content fullscreen>
             <div class="project-ribbon">
               <div class="project-heading">
@@ -616,6 +733,7 @@ export class AppRoot {
               {this.renderPreview()}
             </main>
           </ion-content>
+          )}
           <ion-toast isOpen={Boolean(this.toast)} message={this.toast?.message} color={this.toast?.color} duration={3200} onDidDismiss={() => { this.toast = undefined; }} />
         </ion-app>
       </Host>

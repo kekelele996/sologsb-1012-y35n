@@ -4,6 +4,17 @@ export type CameraAngle = '正面' | '左侧 45°' | '右侧 45°' | '俯拍手�
 export type CaptionPosition = '下方安全区' | '上移 15%' | '角标提示' | '画面中央';
 export type GestureZone = '左侧' | '中央' | '右侧';
 
+/**
+ * 检查点归编排台维护：编号 + 标题 + 所在秒数。
+ * 学习档案里的掌握记录只按检查点编号（id）挂接。
+ */
+export interface Checkpoint {
+  id: string;
+  code: string;
+  title: string;
+  atSecond: number;
+}
+
 export interface LessonStep {
   id: string;
   title: string;
@@ -22,7 +33,7 @@ export interface LessonStep {
   altText: string;
   prerequisiteId: string;
   difficulty: Difficulty;
-  cuePoints: number[];
+  checkpoints: Checkpoint[];
 }
 
 export interface CourseModule {
@@ -63,140 +74,34 @@ export interface ValidationCheck {
   moduleId?: string;
 }
 
-export const STORAGE_KEY = 'sologsb-1012-sign-course-project-v1';
+/** 供学习档案登记掌握记录时选择的检查点目录（只读投影）。 */
+export interface CheckpointRef {
+  id: string;
+  code: string;
+  title: string;
+  stepId: string;
+  stepTitle: string;
+  moduleId: string;
+  moduleTitle: string;
+  atSecond: number;
+}
 
-export function createDemoProject(): CourseProject {
-  const modules: CourseModule[] = [
-    {
-      id: 'module-1',
-      title: '模块一 · 日常问候',
-      summary: '建立手形、视线和面部表情之间的配合，完成三个基础问候。',
-      color: '#15827a',
-      steps: [
-        {
-          id: 'step-1-1',
-          title: '观察“你好”的完整动作',
-          kind: '示范',
-          duration: 35,
-          demoTitle: '你好 · 正面慢速示范',
-          demoUrl: '',
-          handshape: '右手掌张开，拇指向上，自额头向外送出',
-          gestureZone: '右侧',
-          caption: '你好：手掌从额前向前送出，同时保持微笑。',
-          captionPosition: '下方安全区',
-          camera: '正面',
-          commonMistakes: ['手掌过于僵硬', '没有视线交流'],
-          exercise: '跟随示范完成两次，每次保持两秒。',
-          exerciseFeedback: '镜面检查手掌高度是否与眉线一致。',
-          altText: '教师面向镜头，用右手掌从额头向前送出，并点头微笑。',
-          prerequisiteId: '',
-          difficulty: '入门',
-          cuePoints: [4, 16, 28],
-        },
-        {
-          id: 'step-1-2',
-          title: '拆解“你好”的手形',
-          kind: '讲解',
-          duration: 50,
-          demoTitle: '你好 · 手部近景',
-          demoUrl: '',
-          handshape: '四指并拢，拇指张开；掌心朝左前侧',
-          gestureZone: '中央',
-          caption: '注意四指并拢，动作沿身体中轴向前。',
-          captionPosition: '画面中央',
-          camera: '俯拍手部',
-          commonMistakes: ['拇指贴住掌心', '动作方向偏向一侧'],
-          exercise: '固定肩部，只移动前臂完成五次。',
-          exerciseFeedback: '如果动作跑偏，先在镜前标记起点和终点。',
-          altText: '手部近景展示四指并拢、拇指张开的起始手形。',
-          prerequisiteId: 'step-1-1',
-          difficulty: '入门',
-          cuePoints: [6, 24, 42],
-        },
-        {
-          id: 'step-1-3',
-          title: '双人问候练习',
-          kind: '练习',
-          duration: 75,
-          demoTitle: '你好 · 双人轮流练习',
-          demoUrl: '',
-          handshape: '保持标准手形，配合点头与视线交换',
-          gestureZone: '中央',
-          caption: '轮流问候，每次动作结束后停一拍，再交换角色。',
-          captionPosition: '上移 15%',
-          camera: '全身远景',
-          commonMistakes: ['动作过早结束', '两人视线没有相遇'],
-          exercise: '两人一组轮流完成问候，交换三次。',
-          exerciseFeedback: '同伴负责确认视线和动作停顿。',
-          altText: '两名学习者相对站立，交替做出问候动作并看向对方。',
-          prerequisiteId: 'step-1-2',
-          difficulty: '进阶',
-          cuePoints: [10, 34, 57],
-        },
-      ],
-    },
-    {
-      id: 'module-2',
-      title: '模块二 · 数量表达',
-      summary: '用数字、空间位置和顺序词完成价格询问。',
-      color: '#8a3ffc',
-      steps: [
-        {
-          id: 'step-2-1',
-          title: '数字一到五的稳定手形',
-          kind: '讲解',
-          duration: 60,
-          demoTitle: '数字 1—5 · 镜面视图',
-          demoUrl: '',
-          handshape: '食指到五指依次展开，手心朝前',
-          gestureZone: '中央',
-          caption: '数字一到五：从食指开始依次增加，不移动手腕。',
-          captionPosition: '下方安全区',
-          camera: '正面',
-          commonMistakes: ['拇指遮挡手指数', '手腕左右摆动'],
-          exercise: '按随机口令连续展示 1—5。',
-          exerciseFeedback: '每个数字保持一秒，同伴随机报数。',
-          altText: '教师手心朝前，依次伸出食指到五指，展示数字一到五。',
-          prerequisiteId: '',
-          difficulty: '入门',
-          cuePoints: [8, 26, 44],
-        },
-        {
-          id: 'step-2-2',
-          title: '组合成“多少钱”',
-          kind: '示范',
-          duration: 45,
-          demoTitle: '多少钱 · 双手组合动作',
-          demoUrl: '',
-          handshape: '双手在胸前交替翻转，随后食指向前点出',
-          gestureZone: '中央',
-          caption: '先做“钱”的交替手形，再用食指向前询问。',
-          captionPosition: '角标提示',
-          camera: '右侧 45°',
-          commonMistakes: ['两手动作不同步', '疑问表情缺失'],
-          exercise: '配合疑问表情完成三次询问。',
-          exerciseFeedback: '录下动作，检查双手是否在胸前同一高度。',
-          altText: '教师双手机械交替翻转后，食指朝前点出并抬眉疑问。',
-          prerequisiteId: 'step-2-1',
-          difficulty: '进阶',
-          cuePoints: [5, 22, 37],
-        },
-      ],
-    },
-  ];
+export const PROJECT_STORAGE_KEY = 'sologsb-1012-sign-course-project-v2';
+/** 升级前课程与掌握情况合订在一起的旧本地稿。 */
+export const LEGACY_PROJECT_STORAGE_KEY = 'sologsb-1012-sign-course-project-v1';
 
+/** 旧数据升级 / 演示数据生成检查点时使用的稳定编号。 */
+export function seededCheckpointId(stepId: string, index: number): string {
+  return `${stepId}-cp-${index + 1}`;
+}
+
+/** 教师在编排台新增检查点时使用的唯一编号。 */
+export function createCheckpoint(stepId: string, code: number, atSecond = 0, title = ''): Checkpoint {
   return {
-    id: 'sign-course-project',
-    title: '零基础手语 · 问候与数量',
-    teacher: '陈老师 / 特殊教育中心',
-    audience: '初次接触手语的初中学习者',
-    status: 'draft',
-    selectedModuleId: 'module-1',
-    selectedStepId: 'step-1-2',
-    modules,
-    frozenVersions: [],
-    lastSavedAt: new Date().toISOString(),
-    revision: 1,
+    id: `${stepId}-cp-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`,
+    code: `CP-${String(code).padStart(2, '0')}`,
+    title,
+    atSecond,
   };
 }
 
@@ -207,6 +112,70 @@ export function selectedModule(project: CourseProject): CourseModule {
 export function selectedStep(project: CourseProject): LessonStep | undefined {
   const module = selectedModule(project);
   return module?.steps.find((step) => step.id === project.selectedStepId) ?? module?.steps[0];
+}
+
+/** 按模块/步骤顺序展开全部检查点，供学习档案侧只读引用。 */
+export function listCheckpoints(project: CourseProject): CheckpointRef[] {
+  const refs: CheckpointRef[] = [];
+  project.modules.forEach((module) => {
+    module.steps.forEach((step) => {
+      step.checkpoints.forEach((checkpoint) => {
+        refs.push({
+          id: checkpoint.id,
+          code: checkpoint.code,
+          title: checkpoint.title,
+          atSecond: checkpoint.atSecond,
+          stepId: step.id,
+          stepTitle: step.title,
+          moduleId: module.id,
+          moduleTitle: module.title,
+        });
+      });
+    });
+  });
+  return refs;
+}
+
+/** 一次提交前后，检查点的改动明细。学习档案据此作废旧掌握记录。 */
+export interface CheckpointDelta {
+  id: string;
+  stepId: string;
+  oldTitle: string;
+  newTitle: string;
+}
+
+export function diffProjectCheckpoints(before: CourseProject, after: CourseProject): { changed: CheckpointDelta[]; deleted: CheckpointDelta[] } {
+  const beforeSteps = new Map<string, LessonStep>();
+  before.modules.forEach((module) => module.steps.forEach((step) => beforeSteps.set(step.id, step)));
+
+  const changed: CheckpointDelta[] = [];
+  const deleted: CheckpointDelta[] = [];
+
+  after.modules.forEach((module) => {
+    module.steps.forEach((step) => {
+      const oldStep = beforeSteps.get(step.id);
+      if (!oldStep) return;
+      const oldMap = new Map(oldStep.checkpoints.map((checkpoint) => [checkpoint.id, checkpoint]));
+      step.checkpoints.forEach((checkpoint) => {
+        const old = oldMap.get(checkpoint.id);
+        if (!old) return;
+        if (old.code !== checkpoint.code || old.title !== checkpoint.title || old.atSecond !== checkpoint.atSecond) {
+          changed.push({ id: checkpoint.id, stepId: step.id, oldTitle: old.title, newTitle: checkpoint.title });
+        }
+      });
+    });
+  });
+
+  after.modules.forEach((module) => {
+    module.steps.forEach((step) => beforeSteps.delete(step.id));
+  });
+  beforeSteps.forEach((step) => {
+    step.checkpoints.forEach((checkpoint) => {
+      deleted.push({ id: checkpoint.id, stepId: step.id, oldTitle: checkpoint.title, newTitle: checkpoint.title });
+    });
+  });
+
+  return { changed, deleted };
 }
 
 export function validateProject(project: CourseProject): ValidationCheck[] {
@@ -245,6 +214,22 @@ export function validateProject(project: CourseProject): ValidationCheck[] {
       if (step.commonMistakes.filter(Boolean).length === 0) {
         checks.push({ id: `mistakes-${step.id}`, severity: 'info', title: `${step.title} 尚未记录常见错误`, detail: '补充常见错误有助于教师现场提示。', stepId: step.id, moduleId: module.id });
       }
+      const seenCodes = new Set<string>();
+      step.checkpoints.forEach((checkpoint) => {
+        if (!checkpoint.title.trim()) {
+          checks.push({ id: `cp-title-${checkpoint.id}`, severity: 'warning', title: `${step.title} 有检查点缺标题`, detail: '学习档案要按检查点标题登记掌握情况，请补全标题。', stepId: step.id, moduleId: module.id });
+        }
+        if (!checkpoint.code.trim()) {
+          checks.push({ id: `cp-code-${checkpoint.id}`, severity: 'warning', title: `${step.title} 有检查点缺编号`, detail: '编号是掌握记录挂接检查点的凭据。', stepId: step.id, moduleId: module.id });
+        } else if (seenCodes.has(checkpoint.code)) {
+          checks.push({ id: `cp-dup-${checkpoint.id}`, severity: 'warning', title: `${step.title} 的检查点编号 ${checkpoint.code} 重复`, detail: '同一学习步骤内的检查点编号必须唯一。', stepId: step.id, moduleId: module.id });
+        } else {
+          seenCodes.add(checkpoint.code);
+        }
+        if (checkpoint.atSecond < 0 || checkpoint.atSecond > step.duration) {
+          checks.push({ id: `cp-time-${checkpoint.id}`, severity: 'warning', title: `检查点 ${checkpoint.code || checkpoint.title} 超出步骤时长`, detail: `检查点需要落在 0–${step.duration} 秒之间。`, stepId: step.id, moduleId: module.id });
+        }
+      });
     });
   });
 

@@ -21,6 +21,7 @@
 - ion-header
 - ion-toolbar
 - ion-buttons
+- [learning-archive](../learning-archive)
 - ion-content
 - ion-toast
 
@@ -39,6 +40,7 @@ graph TD;
   app-root --> ion-header
   app-root --> ion-toolbar
   app-root --> ion-buttons
+  app-root --> learning-archive
   app-root --> ion-content
   app-root --> ion-toast
   ion-button --> ion-ripple-effect
@@ -78,6 +80,8 @@ graph TD;
   ion-select-modal --> ion-list
   ion-modal --> ion-backdrop
   ion-segment-button --> ion-ripple-effect
+  learning-archive --> ion-button
+  learning-archive --> ion-toast
   ion-toast --> ion-icon
   ion-toast --> ion-ripple-effect
   style app-root fill:#f9f,stroke:#333,stroke-width:4px
