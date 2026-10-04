@@ -9,9 +9,10 @@
 
 ### Depends on
 
-- ion-badge
+- ion-toggle
 - ion-button
 - ion-input
+- ion-badge
 - ion-select
 - ion-select-option
 - ion-textarea
@@ -27,9 +28,10 @@
 ### Graph
 ```mermaid
 graph TD;
-  app-root --> ion-badge
+  app-root --> ion-toggle
   app-root --> ion-button
   app-root --> ion-input
+  app-root --> ion-badge
   app-root --> ion-select
   app-root --> ion-select-option
   app-root --> ion-textarea
@@ -41,6 +43,7 @@ graph TD;
   app-root --> ion-buttons
   app-root --> ion-content
   app-root --> ion-toast
+  ion-toggle --> ion-icon
   ion-button --> ion-ripple-effect
   ion-input --> ion-icon
   ion-select --> ion-select-popover

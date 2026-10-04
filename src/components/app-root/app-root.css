@@ -219,3 +219,99 @@ ion-content { --background: var(--studio-canvas); }
   .editor-panel { overflow: visible; }
   .editor-scroll { overflow: visible; }
 }
+
+/* ---- 检查点编辑器（编排台） ---- */
+.checkpoint-editor { display: flex; flex-direction: column; gap: 6px; }
+.checkpoint-editor-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--studio-muted); font-size: 10px; }
+.checkpoint-editor-head .studio-button { --padding-start: 6px; --padding-end: 6px; font-size: 10px; }
+.checkpoint-empty { margin: 0; padding: 8px 10px; border: 1px dashed var(--studio-line); border-radius: 7px; color: var(--studio-muted); font-size: 10px; }
+.checkpoint-row { display: flex; align-items: center; gap: 6px; }
+.checkpoint-row .studio-input { margin-top: 0; }
+.checkpoint-no { width: 22px; height: 22px; display: grid; place-items: center; flex: none; border-radius: 50%; background: #e4f1ed; color: #216e62; font: 600 10px/1 "SFMono-Regular", monospace; }
+.checkpoint-title-input { flex: 1; min-width: 0; }
+.checkpoint-time-input { width: 74px; flex: none; }
+.checkpoint-remove { width: 26px; height: 26px; flex: none; border: 1px solid var(--studio-line); border-radius: 50%; background: #fff; color: #b42318; cursor: pointer; font-size: 14px; line-height: 1; }
+.checkpoint-remove:disabled { opacity: .4; cursor: not-allowed; }
+
+/* ---- 学习档案面板 ---- */
+.archive-panel { padding: 14px 16px 24px; display: flex; flex-direction: column; gap: 12px; min-height: 100%; }
+.archive-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 10px; background: #fff; }
+.archive-stats { display: flex; align-items: center; gap: 4px; }
+.archive-stats > div { min-width: 56px; padding: 2px 10px; border-left: 1px solid var(--studio-line); display: flex; flex-direction: column; }
+.archive-stats > div:first-child { border-left: 0; }
+.archive-stats strong { font-size: 18px; font-weight: 600; }
+.archive-stats span { color: var(--studio-muted); font-size: 9px; }
+.archive-actions { display: flex; align-items: center; gap: 10px; }
+.simulate-toggle { display: flex; align-items: center; gap: 6px; color: var(--studio-muted); font-size: 10px; cursor: pointer; }
+.simulate-toggle ion-toggle { --track-background: #c3d2cd; }
+
+.archive-body { display: flex; gap: 12px; align-items: stretch; min-height: 420px; }
+.archive-roster { width: 230px; flex: none; display: flex; flex-direction: column; border: 1px solid var(--studio-line); border-radius: 10px; background: #fff; overflow: hidden; }
+.roster-add { padding: 10px; border-bottom: 1px solid var(--studio-line); display: flex; flex-direction: column; gap: 6px; background: #f7faf9; }
+.roster-add .studio-input { margin-top: 0; --min-height: 40px; font-size: 11px; }
+.roster-add .studio-button { align-self: flex-end; }
+.roster-list { flex: 1; overflow: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.roster-item { width: 100%; padding: 8px; display: flex; align-items: center; gap: 9px; border: 1px solid transparent; border-radius: 8px; background: #f5f8f7; text-align: left; cursor: pointer; }
+.roster-item:hover { background: #edf4f2; }
+.roster-item.active { background: #e4f2ed; border-color: #84b8ad; }
+.roster-avatar { width: 30px; height: 30px; flex: none; display: grid; place-items: center; border-radius: 50%; background: #d8f0ea; color: #1f6f62; font-size: 12px; font-weight: 700; }
+.roster-copy { min-width: 0; display: flex; flex-direction: column; }
+.roster-copy strong { font-size: 12px; }
+.roster-copy small { margin-top: 2px; color: var(--studio-muted); font-size: 9px; }
+
+.archive-detail { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 12px; }
+.detail-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px 14px; border: 1px solid var(--studio-line); border-radius: 10px; background: #fff; }
+.detail-head h2 { margin: 0; font: 700 17px/1.2 Georgia, "Songti SC", serif; }
+.detail-head small { display: block; margin-top: 3px; color: var(--studio-muted); font-size: 10px; }
+.detail-conclusion { display: flex; align-items: center; gap: 8px; }
+.conclusion-badge { padding: 5px 10px; border-radius: 999px; background: #e4f2ed; color: #27705f; font-size: 10px; font-weight: 600; }
+
+.eligibility-bar { padding: 10px 12px; border: 1px solid var(--studio-line); border-radius: 10px; background: #fff; display: flex; flex-direction: column; gap: 6px; }
+.eligibility-bar > span { color: var(--studio-muted); font-size: 10px; }
+.eligibility-track { height: 6px; border-radius: 999px; background: #e6eeeb; overflow: hidden; }
+.eligibility-track span { display: block; height: 100%; background: linear-gradient(90deg, #3f9c8b, #65d0b0); }
+
+.record-mastery, .records-overview { padding: 12px 14px; border: 1px solid var(--studio-line); border-radius: 10px; background: #fff; }
+.record-mastery h3, .records-overview h3 { margin: 0 0 4px; font-size: 13px; }
+.record-hint { margin: 0 0 10px; color: var(--studio-muted); font-size: 10px; }
+.checkpoint-record-list { display: flex; flex-direction: column; gap: 6px; }
+.checkpoint-record-row { display: flex; align-items: center; gap: 8px; padding: 7px 9px; border: 1px solid var(--studio-line); border-radius: 8px; background: #fbfdfc; }
+.cp-title { flex: 1; min-width: 0; font-size: 11px; }
+.cp-time { color: var(--studio-muted); font: 500 10px/1 "SFMono-Regular", monospace; }
+.cp-actions { display: flex; gap: 5px; }
+.cp-actions button { padding: 4px 10px; border: 1px solid var(--studio-line); border-radius: 999px; background: #fff; color: var(--studio-muted); font-size: 10px; cursor: pointer; }
+.cp-actions button.master.active { background: #e4f2ed; border-color: #63a096; color: #27705f; }
+.cp-actions button.unmaster.active { background: #fdecea; border-color: #e5a39d; color: #b42318; }
+
+.records-overview .empty-records { margin: 6px 0 0; color: var(--studio-muted); font-size: 10px; }
+.record-list { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.record-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 10px; border: 1px solid var(--studio-line); border-radius: 8px; background: #fbfdfc; }
+.record-row.invalidated { background: #fff8ec; border-color: #f0d9a8; }
+.record-main { min-width: 0; display: flex; flex-direction: column; }
+.record-main strong { font-size: 11px; }
+.record-main small { margin-top: 2px; color: var(--studio-muted); font-size: 9px; }
+.record-tags { display: flex; align-items: center; gap: 6px; flex: none; }
+.record-tags .studio-button { --padding-start: 8px; --padding-end: 8px; font-size: 10px; }
+.record-badge { padding: 3px 8px; border-radius: 999px; font-size: 9px; font-weight: 600; white-space: nowrap; }
+.record-badge.synced { background: #e4f2ed; color: #27705f; }
+.record-badge.pending { background: #eef2f1; color: #5c716b; }
+.record-badge.suspended { background: #fff1df; color: #8e5300; }
+.record-badge.failed { background: #fdecea; color: #b42318; }
+.record-badge.invalidated { background: #fff1df; color: #8e5300; }
+
+.unmatched-section { padding: 12px 14px; border: 1px solid #f0d9a8; border-left-width: 4px; border-radius: 10px; background: #fffaf0; }
+.unmatched-section h3 { margin: 0 0 8px; font-size: 12px; color: #8e5300; }
+.unmatched-list { display: flex; flex-direction: column; gap: 6px; }
+.unmatched-item { display: flex; flex-direction: column; gap: 2px; padding: 7px 9px; border: 1px solid #f0d9a8; border-radius: 7px; background: #fff; }
+.unmatched-item strong { font-size: 11px; }
+.unmatched-item small { color: var(--studio-muted); font-size: 9px; }
+
+.archive-detail .empty-detail { min-height: 380px; padding: 60px 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; color: var(--studio-muted); }
+.archive-detail .empty-detail h2 { margin: 0; color: var(--studio-ink); font-size: 15px; }
+.archive-detail .empty-detail p { max-width: 320px; font-size: 11px; line-height: 1.55; }
+
+@media (max-width: 980px) {
+  .archive-body { flex-direction: column; }
+  .archive-roster { width: 100%; }
+}
+

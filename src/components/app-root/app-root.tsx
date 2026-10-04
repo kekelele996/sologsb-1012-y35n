@@ -1,4 +1,4 @@
-import { Component, Host, State, h, Listen } from '@stencil/core';
+import { Component, Fragment, Host, State, h, Listen } from '@stencil/core';
 import {
   cloneProject,
   createDemoProject,
@@ -8,6 +8,7 @@ import {
   validateProject,
   type CameraAngle,
   type CaptionPosition,
+  type Checkpoint,
   type CourseModule,
   type CourseProject,
   type Difficulty,
@@ -15,6 +16,30 @@ import {
   type LessonStep,
   type ValidationCheck,
 } from '../../models';
+import {
+  addStudent,
+  addToRemoteRoster,
+  completionEligibility,
+  createArchive,
+  createRemoteArchive,
+  hasConclusion,
+  invalidateStaleRecords,
+  issueCompletion,
+  loadArchive,
+  loadRemote,
+  migrateArchive,
+  recordMastery as recordMasteryRecord,
+  reconcileArchive,
+  recordsForStudent,
+  recordsForStep,
+  saveArchive,
+  saveRemote,
+  type LearningArchive,
+  type MasteryLevel,
+  type MasteryRecord,
+  type RemoteArchive,
+  type Student,
+} from '../../archive';
 
 type PreviewSize = 'phone' | 'tablet';
 
@@ -26,11 +51,17 @@ type PreviewSize = 'phone' | 'tablet';
 export class AppRoot {
   @State() project: CourseProject = createDemoProject();
   @State() previewSize: PreviewSize = 'phone';
-  @State() activePanel: 'editor' | 'checks' = 'editor';
+  @State() activePanel: 'editor' | 'checks' | 'archive' = 'editor';
   @State() playing = false;
   @State() playProgress = 0;
   @State() offline = typeof navigator !== 'undefined' ? !navigator.onLine : false;
   @State() toast?: { color: string; message: string };
+  @State() archive: LearningArchive = createArchive();
+  @State() remote: RemoteArchive = createRemoteArchive();
+  @State() selectedStudentId = '';
+  @State() simulateFailure = false;
+  @State() newStudentName = '';
+  @State() newStudentNote = '';
   private past: CourseProject[] = [];
   private future: CourseProject[] = [];
   private playTimer?: number;
@@ -42,6 +73,31 @@ export class AppRoot {
     } catch {
       this.project = createDemoProject();
     }
+    this.archive = loadArchive();
+    this.remote = loadRemote();
+    this.runMigration();
+    this.refreshInvalidation();
+    if (!this.selectedStudentId && this.archive.students.length > 0) {
+      this.selectedStudentId = this.archive.students[0].id;
+    }
+  }
+
+  private runMigration(): void {
+    const result = migrateArchive(this.archive, this.project);
+    if (result.backfilled > 0 || result.unmatched > 0) {
+      this.archive = result.archive;
+      saveArchive(this.archive);
+      if (result.backfilled > 0) this.showToast('success', `已按标题回填 ${result.backfilled} 条旧掌握记录的检查点编号。`);
+      if (result.unmatched > 0) this.showToast('warning', `有 ${result.unmatched} 条旧记录补不上检查点编号，已单列。`);
+    }
+  }
+
+  private refreshInvalidation(): void {
+    const next = invalidateStaleRecords(this.archive, this.project);
+    if (next !== this.archive) {
+      this.archive = next;
+      saveArchive(this.archive);
+    }
   }
 
   disconnectedCallback(): void {
@@ -51,7 +107,8 @@ export class AppRoot {
   @Listen('online', { target: 'window' })
   handleOnline(): void {
     this.offline = false;
-    this.showToast('success', '网络已恢复，本地草稿无需合并即可继续编辑。');
+    this.showToast('success', '网络已恢复，正在按学员对账合并掌握记录。');
+    this.reconcile();
   }
 
   @Listen('offline', { target: 'window' })
@@ -204,7 +261,11 @@ export class AppRoot {
       altText: '',
       prerequisiteId: prior?.id ?? '',
       difficulty: '入门',
-      cuePoints: [8, 20, 32],
+      checkpoints: [
+        { id: `cp-${Date.now().toString(36)}-1`, title: '起始手形', time: 8 },
+        { id: `cp-${Date.now().toString(36)}-2`, title: '动作中点', time: 20 },
+        { id: `cp-${Date.now().toString(36)}-3`, title: '结束停顿', time: 32 },
+      ],
     };
     this.commit((draft) => ({
       ...draft,
@@ -306,6 +367,291 @@ export class AppRoot {
 
   private reviseFrozen(): void {
     this.commit((draft) => ({ ...draft, status: 'draft' }), '已创建修订版，可继续编辑。');
+  }
+
+  private updateCheckpoint(checkpointId: string, patch: Partial<Checkpoint>): void {
+    const stepId = this.currentStep?.id;
+    if (!stepId) return;
+    this.commit((draft) => ({
+      ...draft,
+      modules: draft.modules.map((module) => module.id === draft.selectedModuleId ? {
+        ...module,
+        steps: module.steps.map((step) => step.id === stepId ? {
+          ...step,
+          checkpoints: step.checkpoints.map((cp) => cp.id === checkpointId ? { ...cp, ...patch } : cp),
+        } : step),
+      } : module),
+    }), '已更新检查点。');
+    this.refreshInvalidation();
+  }
+
+  private addCheckpoint(): void {
+    const stepId = this.currentStep?.id;
+    if (!stepId) return;
+    const id = `cp-${Date.now().toString(36)}`;
+    this.commit((draft) => ({
+      ...draft,
+      modules: draft.modules.map((module) => module.id === draft.selectedModuleId ? {
+        ...module,
+        steps: module.steps.map((step) => step.id === stepId ? {
+          ...step,
+          checkpoints: [...step.checkpoints, { id, title: '新检查点', time: Math.min(step.duration, 10) }],
+        } : step),
+      } : module),
+    }), '已添加检查点。');
+    this.refreshInvalidation();
+  }
+
+  private removeCheckpoint(checkpointId: string): void {
+    const stepId = this.currentStep?.id;
+    if (!stepId) return;
+    this.commit((draft) => ({
+      ...draft,
+      modules: draft.modules.map((module) => module.id === draft.selectedModuleId ? {
+        ...module,
+        steps: module.steps.map((step) => step.id === stepId ? {
+          ...step,
+          checkpoints: step.checkpoints.filter((cp) => cp.id !== checkpointId),
+        } : step),
+      } : module),
+    }), '已删除检查点。');
+    this.refreshInvalidation();
+  }
+
+  private selectStudent(studentId: string): void {
+    this.selectedStudentId = studentId;
+  }
+
+  private addStudent(): void {
+    if (!this.newStudentName.trim()) {
+      this.showToast('warning', '请先填写学员姓名。');
+      return;
+    }
+    this.archive = addStudent(this.archive, this.newStudentName, this.newStudentNote);
+    const added = this.archive.students[this.archive.students.length - 1];
+    this.selectedStudentId = added.id;
+    this.newStudentName = '';
+    this.newStudentNote = '';
+    saveArchive(this.archive);
+    this.showToast('success', '已添加学员，记录保存在学习档案。');
+  }
+
+  private recordMastery(checkpointId: string, level: MasteryLevel): void {
+    if (!this.selectedStudentId) {
+      this.showToast('warning', '请先选择学员。');
+      return;
+    }
+    this.archive = recordMasteryRecord(this.archive, this.project, this.selectedStudentId, checkpointId, level, this.project.teacher);
+    saveArchive(this.archive);
+    this.showToast('success', level === '掌握' ? '已记录掌握（待同步）。' : '已记录未掌握（待同步）。');
+  }
+
+  private issueCompletion(): void {
+    if (!this.selectedStudentId) return;
+    this.archive = issueCompletion(this.archive, this.project, this.selectedStudentId, this.project.teacher);
+    saveArchive(this.archive);
+    this.showToast('success', '已发出结业结论，既往掌握记录照旧保留。');
+  }
+
+  private addToRoster(student: Student): void {
+    this.remote = addToRemoteRoster(this.remote, student);
+    saveRemote(this.remote);
+    this.showToast('success', `已将 ${student.name} 加入教研组花名册。`);
+  }
+
+  private reconcile(): void {
+    if (this.offline) {
+      this.showToast('warning', '离线中，记录先保存在本机，恢复后自动对账合并。');
+      return;
+    }
+    const result = reconcileArchive(this.archive, this.remote, { simulateFailure: this.simulateFailure });
+    this.archive = result.archive;
+    this.remote = result.remote;
+    saveArchive(this.archive);
+    saveRemote(this.remote);
+    const { merged, suspended, failed } = result.outcome;
+    if (failed > 0) {
+      this.showToast('danger', `${failed} 条记录同步失败，可在档案侧重试。`);
+    } else if (suspended > 0) {
+      this.showToast('warning', `${merged} 条已合并，${suspended} 条对不上已挂起。`);
+    } else if (merged > 0) {
+      this.showToast('success', `已按学员对账合并 ${merged} 条掌握记录。`);
+    } else {
+      this.showToast('success', '对账完成，没有待同步记录。');
+    }
+  }
+
+  private stepTitleOf(stepId: string): string {
+    for (const module of this.project.modules) {
+      const step = module.steps.find((item) => item.id === stepId);
+      if (step) return step.title;
+    }
+    return '未知步骤';
+  }
+
+  private renderSyncBadge(record: MasteryRecord) {
+    if (record.invalidated) return <span class="record-badge invalidated">已作废 · 待重上</span>;
+    if (record.syncStatus === 'synced') return <span class="record-badge synced">已同步</span>;
+    if (record.syncStatus === 'pending') return <span class="record-badge pending">待同步</span>;
+    if (record.syncStatus === 'suspended') return <span class="record-badge suspended">已挂起</span>;
+    return <span class="record-badge failed">失败 · 重试</span>;
+  }
+
+  private renderArchivePanel() {
+    const students = this.archive.students;
+    const selected = students.find((student) => student.id === this.selectedStudentId) ?? students[0];
+    const eligibility = selected ? completionEligibility(this.archive, this.project, selected.id) : null;
+    const completed = selected ? hasConclusion(this.archive, selected.id) : false;
+    const conclusion = selected ? this.archive.conclusions.find((item) => item.studentId === selected.id) : undefined;
+    const currentStep = this.currentStep;
+    const pendingCount = this.archive.records.filter((record) => record.syncStatus === 'pending' && !record.invalidated).length;
+    const suspendedCount = this.archive.records.filter((record) => record.syncStatus === 'suspended').length;
+    const failedCount = this.archive.records.filter((record) => record.syncStatus === 'failed').length;
+    const invalidatedCount = this.archive.records.filter((record) => record.invalidated).length;
+    const unmatchedCount = this.archive.unmatched.length;
+    const selectedRecords = selected ? recordsForStudent(this.archive, selected.id) : [];
+    const localStudentNotInRemote = (record: MasteryRecord): boolean => {
+      const student = this.archive.students.find((item) => item.id === record.studentId);
+      if (!student) return false;
+      return !this.remote.roster.some((item) => item.id === student.id || item.name === student.name);
+    };
+
+    return (
+      <section class="archive-panel">
+        <div class="archive-toolbar">
+          <div class="archive-stats">
+            <div><strong>{students.length}</strong><span>学员</span></div>
+            <div><strong>{pendingCount}</strong><span>待同步</span></div>
+            <div><strong>{suspendedCount}</strong><span>已挂起</span></div>
+            <div><strong>{failedCount}</strong><span>失败</span></div>
+            <div><strong>{invalidatedCount}</strong><span>已作废</span></div>
+            <div><strong>{unmatchedCount}</strong><span>待补录</span></div>
+          </div>
+          <div class="archive-actions">
+            <label class="simulate-toggle">
+              <ion-toggle checked={this.simulateFailure} onIonChange={(event) => { this.simulateFailure = event.detail.checked; }} />
+              <span>模拟同步失败</span>
+            </label>
+            <ion-button size="small" class="studio-button" onClick={() => this.reconcile()}>对账合并</ion-button>
+          </div>
+        </div>
+
+        <div class="archive-body">
+          <aside class="archive-roster">
+            <div class="roster-add">
+              <ion-input label="学员姓名" labelPlacement="stacked" class="studio-input" value={this.newStudentName} placeholder="例如 赵同学" onIonInput={(event) => { this.newStudentName = event.detail.value ?? ''; }} />
+              <ion-input label="备注（可空）" labelPlacement="stacked" class="studio-input" value={this.newStudentNote} placeholder="教研组在册情况" onIonInput={(event) => { this.newStudentNote = event.detail.value ?? ''; }} />
+              <ion-button size="small" class="studio-button" onClick={() => this.addStudent()}>添加学员</ion-button>
+            </div>
+            <div class="roster-list">
+              {students.map((student) => (
+                <button class={`roster-item ${student.id === selected?.id ? 'active' : ''}`} onClick={() => this.selectStudent(student.id)}>
+                  <span class="roster-avatar">{student.name.slice(0, 1)}</span>
+                  <span class="roster-copy">
+                    <strong>{student.name}</strong>
+                    <small>{hasConclusion(this.archive, student.id) ? '已结业' : '在学'}</small>
+                  </span>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          <div class="archive-detail">
+            {selected ? (
+              <Fragment>
+                <div class="detail-head">
+                  <div>
+                    <h2>{selected.name}</h2>
+                    <small>{selected.note || '教研组在册学员'}</small>
+                  </div>
+                  <div class="detail-conclusion">
+                    {completed && conclusion ? (
+                      <span class="conclusion-badge">已结业 · {this.formatDate(conclusion.issuedAt)}</span>
+                    ) : (
+                      <ion-button size="small" class="studio-button" disabled={!eligibility?.eligible} onClick={() => this.issueCompletion()}>发出结业结论</ion-button>
+                    )}
+                  </div>
+                </div>
+
+                {eligibility && !completed && (
+                  <div class="eligibility-bar">
+                    <span>掌握进度 {eligibility.mastered}/{eligibility.total}</span>
+                    <div class="eligibility-track"><span style={{ width: `${eligibility.total ? (eligibility.mastered / eligibility.total) * 100 : 0}%` }} /></div>
+                  </div>
+                )}
+
+                {currentStep && (
+                  <div class="record-mastery">
+                    <h3>记录掌握 · {currentStep.title}</h3>
+                    <p class="record-hint">按检查点记录，断网先存本机，恢复后按学员对账合并。</p>
+                    <div class="checkpoint-record-list">
+                      {currentStep.checkpoints.length === 0 && <p class="checkpoint-empty">当前步骤还没有检查点。</p>}
+                      {currentStep.checkpoints.map((cp) => {
+                        const existing = recordsForStep(this.archive, selected.id, currentStep.id).find((record) => record.checkpointId === cp.id && !record.invalidated);
+                        return (
+                          <div class="checkpoint-record-row" key={cp.id}>
+                            <span class="cp-title">{cp.title}</span>
+                            <span class="cp-time">{cp.time}s</span>
+                            <div class="cp-actions">
+                              <button class={existing?.level === '掌握' ? 'active master' : ''} onClick={() => this.recordMastery(cp.id, '掌握')}>掌握</button>
+                              <button class={existing?.level === '未掌握' ? 'active unmaster' : ''} onClick={() => this.recordMastery(cp.id, '未掌握')}>未掌握</button>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div class="records-overview">
+                  <h3>掌握记录</h3>
+                  {selectedRecords.length === 0 && <p class="empty-records">暂无掌握记录。</p>}
+                  <div class="record-list">
+                    {selectedRecords.map((record) => (
+                      <div class={`record-row ${record.invalidated ? 'invalidated' : ''}`} key={record.id}>
+                        <div class="record-main">
+                          <strong>{record.checkpointTitle || '未命名检查点'}</strong>
+                          <small>{this.stepTitleOf(record.stepId)} · {record.level} · {this.formatDate(record.recordedAt)}</small>
+                        </div>
+                        <div class="record-tags">
+                          {this.renderSyncBadge(record)}
+                          {record.syncStatus === 'suspended' && localStudentNotInRemote(record) && (
+                            <ion-button size="small" fill="outline" class="studio-button" onClick={() => this.addToRoster(this.archive.students.find((item) => item.id === record.studentId)!)}>加入教研组花名册</ion-button>
+                          )}
+                          {record.syncStatus === 'failed' && (
+                            <ion-button size="small" fill="outline" class="studio-button" onClick={() => this.reconcile()}>重试</ion-button>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </Fragment>
+            ) : (
+              <div class="empty-detail">
+                <div class="empty-glyph">档</div>
+                <h2>学习档案为空</h2>
+                <p>添加学员后即可按检查点记录掌握情况，断网也能先记。</p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {unmatchedCount > 0 && (
+          <div class="unmatched-section">
+            <h3>补不上的检查点编号（单列）</h3>
+            <div class="unmatched-list">
+              {this.archive.unmatched.map((item) => (
+                <div class="unmatched-item" key={item.id}>
+                  <strong>{item.rawTitle}</strong>
+                  <small>学员：{item.rawStudentName || '未知'} · {item.rawStepTitle || '未指定步骤'} · {item.reason}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </section>
+    );
   }
 
   private togglePlay(): void {
@@ -451,7 +797,21 @@ export class AppRoot {
               <ion-select-option value="">无前置条件</ion-select-option>
               {prerequisites.map((item) => <ion-select-option value={item.id}>{item.title}</ion-select-option>)}
             </ion-select>
-            <ion-input disabled={frozen} label="检查点（秒，用逗号分隔）" labelPlacement="stacked" class="studio-input" value={step.cuePoints.join(', ')} onIonInput={(event) => this.updateStep({ cuePoints: (event.detail.value ?? '').split(/[,，\s]+/).map(Number).filter((value) => Number.isFinite(value)) })} />
+            <div class="checkpoint-editor">
+              <div class="checkpoint-editor-head">
+                <span>检查点（编号 · 标题 · 秒）</span>
+                <ion-button size="small" fill="clear" class="studio-button" disabled={frozen} onClick={() => this.addCheckpoint()}>＋ 添加检查点</ion-button>
+              </div>
+              {step.checkpoints.length === 0 && <p class="checkpoint-empty">暂无检查点，掌握记录将无法关联。</p>}
+              {step.checkpoints.map((cp, index) => (
+                <div class="checkpoint-row" key={cp.id}>
+                  <span class="checkpoint-no">{index + 1}</span>
+                  <ion-input disabled={frozen} class="studio-input checkpoint-title-input" value={cp.title} onIonInput={(event) => this.updateCheckpoint(cp.id, { title: event.detail.value ?? '' })} />
+                  <ion-input disabled={frozen} type="number" min="0" max={step.duration} class="studio-input checkpoint-time-input" value={String(cp.time)} onIonInput={(event) => this.updateCheckpoint(cp.id, { time: Number(event.detail.value) || 0 })} />
+                  <button class="checkpoint-remove" disabled={frozen} onClick={() => this.removeCheckpoint(cp.id)} title="删除检查点">×</button>
+                </div>
+              ))}
+            </div>
           </div>
           <ion-textarea disabled={frozen} autoGrow label="常见错误（每行一条）" labelPlacement="stacked" class="studio-input" value={step.commonMistakes.join('\n')} onIonInput={(event) => this.updateStep({ commonMistakes: (event.detail.value ?? '').split('\n').filter(Boolean) })} />
           <div class="form-grid two">
@@ -495,14 +855,14 @@ export class AppRoot {
               <button class="play-button" onClick={() => this.togglePlay()}>{this.playing ? 'Ⅱ' : '▶'}</button>
               <div class="player-timeline">
                 <span style={{ width: `${progress}%` }} />
-                {step.cuePoints.map((cue) => <i style={{ left: `${Math.min(100, (cue / Math.max(1, step.duration)) * 100)}%` }} title={`检查点 ${cue}s`} />)}
+                {step.checkpoints.map((cp) => <i style={{ left: `${Math.min(100, (cp.time / Math.max(1, step.duration)) * 100)}%` }} title={`${cp.title} · ${cp.time}s`} />)}
               </div>
               <span class="time-code">{String(Math.floor(this.playProgress * step.duration)).padStart(2, '0')} / {step.duration}s</span>
             </div>
             <div class="preview-meta">
               <div><strong>{step.kind}</strong><span>步骤类型</span></div>
               <div><strong>{step.difficulty}</strong><span>难度标签</span></div>
-              <div><strong>{step.cuePoints.length}</strong><span>检查点</span></div>
+              <div><strong>{step.checkpoints.length}</strong><span>检查点</span></div>
             </div>
             <p class="preview-caption-text">{step.caption}</p>
           </div>
@@ -609,8 +969,9 @@ export class AppRoot {
                 <div class="panel-switcher">
                   <button class={this.activePanel === 'editor' ? 'active' : ''} onClick={() => { this.activePanel = 'editor'; }}>步骤编排</button>
                   <button class={this.activePanel === 'checks' ? 'active' : ''} onClick={() => { this.activePanel = 'checks'; }}>发布前检查 <span>{this.checks.length}</span></button>
+                  <button class={this.activePanel === 'archive' ? 'active' : ''} onClick={() => { this.activePanel = 'archive'; this.refreshInvalidation(); }}>学习档案 <span>{this.archive.records.filter((record) => record.syncStatus === 'pending' || record.syncStatus === 'suspended' || record.syncStatus === 'failed' || record.invalidated).length}</span></button>
                 </div>
-                <div class="editor-scroll">{this.activePanel === 'editor' ? this.renderStepEditor() : this.renderChecks()}</div>
+                <div class="editor-scroll">{this.activePanel === 'editor' ? this.renderStepEditor() : this.activePanel === 'checks' ? this.renderChecks() : this.renderArchivePanel()}</div>
               </section>
 
               {this.renderPreview()}

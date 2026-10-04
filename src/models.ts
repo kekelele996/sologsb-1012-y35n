@@ -4,6 +4,12 @@ export type CameraAngle = '正面' | '左侧 45°' | '右侧 45°' | '俯拍手�
 export type CaptionPosition = '下方安全区' | '上移 15%' | '角标提示' | '画面中央';
 export type GestureZone = '左侧' | '中央' | '右侧';
 
+export interface Checkpoint {
+  id: string;
+  title: string;
+  time: number;
+}
+
 export interface LessonStep {
   id: string;
   title: string;
@@ -22,7 +28,7 @@ export interface LessonStep {
   altText: string;
   prerequisiteId: string;
   difficulty: Difficulty;
-  cuePoints: number[];
+  checkpoints: Checkpoint[];
 }
 
 export interface CourseModule {
@@ -66,6 +72,8 @@ export interface ValidationCheck {
 export const STORAGE_KEY = 'sologsb-1012-sign-course-project-v1';
 
 export function createDemoProject(): CourseProject {
+  const buildCheckpoints = (stepId: string, defs: Array<[number, string]>): Checkpoint[] =>
+    defs.map(([time, title], index) => ({ id: `${stepId}-cp${index + 1}`, title, time }));
   const modules: CourseModule[] = [
     {
       id: 'module-1',
@@ -91,7 +99,7 @@ export function createDemoProject(): CourseProject {
           altText: '教师面向镜头，用右手掌从额头向前送出，并点头微笑。',
           prerequisiteId: '',
           difficulty: '入门',
-          cuePoints: [4, 16, 28],
+          checkpoints: buildCheckpoints('step-1-1', [[4, '抬手起势'], [16, '掌心前送'], [28, '点头收势']]),
         },
         {
           id: 'step-1-2',
@@ -111,7 +119,7 @@ export function createDemoProject(): CourseProject {
           altText: '手部近景展示四指并拢、拇指张开的起始手形。',
           prerequisiteId: 'step-1-1',
           difficulty: '入门',
-          cuePoints: [6, 24, 42],
+          checkpoints: buildCheckpoints('step-1-2', [[6, '起手定位'], [24, '中轴前送'], [42, '停腕收手']]),
         },
         {
           id: 'step-1-3',
@@ -131,7 +139,7 @@ export function createDemoProject(): CourseProject {
           altText: '两名学习者相对站立，交替做出问候动作并看向对方。',
           prerequisiteId: 'step-1-2',
           difficulty: '进阶',
-          cuePoints: [10, 34, 57],
+          checkpoints: buildCheckpoints('step-1-3', [[10, '对视起手'], [34, '轮流前送'], [57, '停拍交换']]),
         },
       ],
     },
@@ -159,7 +167,7 @@ export function createDemoProject(): CourseProject {
           altText: '教师手心朝前，依次伸出食指到五指，展示数字一到五。',
           prerequisiteId: '',
           difficulty: '入门',
-          cuePoints: [8, 26, 44],
+          checkpoints: buildCheckpoints('step-2-1', [[8, '起手定位'], [26, '依次展开'], [44, '停腕收势']]),
         },
         {
           id: 'step-2-2',
@@ -179,7 +187,7 @@ export function createDemoProject(): CourseProject {
           altText: '教师双手机械交替翻转后，食指朝前点出并抬眉疑问。',
           prerequisiteId: 'step-2-1',
           difficulty: '进阶',
-          cuePoints: [5, 22, 37],
+          checkpoints: buildCheckpoints('step-2-2', [[5, '胸前翻手'], [22, '食指前点'], [37, '挑眉疑问']]),
         },
       ],
     },
@@ -207,6 +215,30 @@ export function selectedModule(project: CourseProject): CourseModule {
 export function selectedStep(project: CourseProject): LessonStep | undefined {
   const module = selectedModule(project);
   return module?.steps.find((step) => step.id === project.selectedStepId) ?? module?.steps[0];
+}
+
+export function findStep(project: CourseProject, stepId: string): { module: CourseModule; step: LessonStep } | undefined {
+  for (const module of project.modules) {
+    const step = module.steps.find((item) => item.id === stepId);
+    if (step) return { module, step };
+  }
+  return undefined;
+}
+
+export function findCheckpoint(project: CourseProject, checkpointId: string): { module: CourseModule; step: LessonStep; checkpoint: Checkpoint } | undefined {
+  for (const module of project.modules) {
+    for (const step of module.steps) {
+      const checkpoint = step.checkpoints.find((item) => item.id === checkpointId);
+      if (checkpoint) return { module, step, checkpoint };
+    }
+  }
+  return undefined;
+}
+
+export function allCheckpoints(project: CourseProject): Array<{ module: CourseModule; step: LessonStep; checkpoint: Checkpoint }> {
+  return project.modules.flatMap((module) =>
+    module.steps.flatMap((step) => step.checkpoints.map((checkpoint) => ({ module, step, checkpoint }))),
+  );
 }
 
 export function validateProject(project: CourseProject): ValidationCheck[] {
